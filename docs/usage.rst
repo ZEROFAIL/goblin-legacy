@@ -118,11 +118,11 @@ neighbor elements, but this API is under review and may be deprecated in favor o
 the vertex centric query API and the proposed edge centric query API.
 
 
-Using the :py:class:`Relationship<goblin.relationships.base.Relationship>` class
+Using the :py:class:`Relationship<goblin.relationships.relationship.Relationship>` class
 --------------------------------------------------------------------------------
 
 In an effort to provide a more convenient API, :py:mod:`Goblin<goblin>` provides
-the :py:class:`Relationship<goblin.relationships.base.Relationship>` class, which allows
+the :py:class:`Relationship<goblin.relationships.relationship.Relationship>` class, which allows
 you to explicitly define relationships between vertex classes::
 
     >>> from goblin import models
@@ -148,9 +148,9 @@ of type `WorksIn` and vertices of type `Department`::
     >>> joe_works_in, r_and_d = yield from joe.department.create(
     ...     vertex_params={'name': 'R&D'})
 
-The :py:class:`Relationship<goblin.relationships.base.Relationship>` class
+The :py:class:`Relationship<goblin.relationships.relationship.Relationship>` class
 provides several other methods for convenience as well. For a full reference,
-please see the :ref:`API docs<goblin.relationships.base.Relationship>`
+please see the :ref:`API docs<goblin.relationships.relationship.Relationship>`
 
 The :py:class:`V<goblin.models.query.V>` ertex centric query API
 ---------------------------------------------------------------

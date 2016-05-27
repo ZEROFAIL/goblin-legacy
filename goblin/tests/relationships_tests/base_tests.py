@@ -10,7 +10,7 @@ from goblin.properties import String, Integer
 from goblin.exceptions import GoblinRelationshipException
 from goblin.tests.base import (
     BaseGoblinTestCase, TestEdgeModel, TestVertexModel, counter)
-from goblin.relationships.base import Relationship
+from goblin.relationships.relationship import Relationship
 
 
 class TestVertex2Model(Vertex):
@@ -48,7 +48,8 @@ class GraphRelationshipBaseTestCase(BaseGoblinTestCase):
 
         # setup relationship
         relationship = self.relationship_base_cls(self.edge_model,
-                                                  self.vertex_model)
+                                                  self.vertex_model,
+                                                  'both')
         self.assertIsNone(relationship.top_level_vertex_class)
         self.assertIsNone(relationship.top_level_vertex)
 
@@ -63,14 +64,14 @@ class GraphRelationshipBaseTestCase(BaseGoblinTestCase):
         # setup relationship
         vertex_start = yield TestVertexModel.create(name='test relationship')
         relationship = self.relationship_base_cls(self.edge_model,
-                                                  self.vertex_model)
+                                                  self.vertex_model,
+                                                  'both')
         relationship.top_level_vertex = vertex_start
         relationship.top_level_vertex_class = self.vertex_model
 
         stream = yield relationship.vertices()
         vertices = yield stream.read()
         self.assertEqual(len(vertices), 0)
-
         v2 = yield self.vertex_model.create(name='other side relationship')
         e1 = yield self.edge_model.create(v2, vertex_start)
         try:
@@ -90,7 +91,7 @@ class GraphRelationshipBaseTestCase(BaseGoblinTestCase):
 
         # setup relationship
         relationship = self.relationship_base_cls(self.edge_model,
-                                                  self.vertex_model)
+                                                  self.vertex_model, 'both')
         self.assertTrue(relationship.allowed(self.edge_model,
                                              self.vertex_model))
 
@@ -143,7 +144,7 @@ class GraphRelationshipBaseTestCase(BaseGoblinTestCase):
         # setup relationship
         vertex_start = yield TestVertexModel.create(name='test relationship')
         relationship = self.relationship_base_cls(TestEdge2Model,
-                                                  TestVertex2Model)
+                                                  TestVertex2Model, 'both')
         relationship.top_level_vertex = vertex_start
         relationship.top_level_vertex_class = self.vertex_model
 

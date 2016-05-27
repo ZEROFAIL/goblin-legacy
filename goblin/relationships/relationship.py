@@ -5,10 +5,11 @@ from functools import wraps
 
 from goblin import connection
 from goblin._compat import array_types, string_types
-from goblin.tools import LazyImportClass
-from goblin.exceptions import GoblinRelationshipException
-
 from goblin.constants import IN, OUT, BOTH
+from goblin.exceptions import GoblinRelationshipException
+from goblin.gremlin import GremlinMethod
+from goblin.tools import LazyImportClass
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,25 +33,16 @@ class Relationship(object):
     Warn if queries return schema violations.
     """
 
-    def __init__(self, edge_class, vertex_class, direction=BOTH, strict=True,
-                 gremlin_path=None, vertex_callback=None, edge_callback=None,
-                 query_callback=None, create_callback=None):
+    def __init__(self, edge_class, vertex_class, direction):
         from goblin.models import Edge, Vertex
         self.edge_classes = self._create_class_tuple(
-            edge_class, enforce_type=Edge)
+            edge_class, Edge)
         self.vertex_classes = self._create_class_tuple(
-            vertex_class, enforce_type=Vertex)
+            vertex_class, Vertex)
         assert direction in (IN, OUT, BOTH), \
             "Direction of Relationship must be of one in (%s, %s, %s)" % (
                 IN, OUT, BOTH)
         self.direction = direction
-        self.strict = strict
-        if gremlin_path:  # pragma: no cover
-            self.gremlin_path = gremlin_path
-        self.vertex_callback = vertex_callback
-        self.edge_callback = edge_callback
-        self.query_callback = query_callback
-        self.create_callback = create_callback
         self.top_level_vertex_class = None
         self.top_level_vertex = None
 
@@ -58,7 +50,7 @@ class Relationship(object):
         self.top_level_vertex = vertex
         self.top_level_vertex_class = vertex.__class__
 
-    def _create_class_tuple(self, model_class, enforce_type=None):
+    def _create_class_tuple(self, model_class, element_type):
         """
         Take in an string, array of classes, or a single class and make a
         tuple of said referenced classes
@@ -66,11 +58,11 @@ class Relationship(object):
         :param model_class: Input to be transformed into reference class(es)
         :type model_class: string_types | array_types | goblin.models.Edge |
             goblin.models.Vertex
-        :param enforce_type: Enforce a specific model type? If not provided,
+        :param element_type: Enforce a specific model type? If not provided,
             everything that is resolved passes, otherwise if a type is given,
             the classes are filtered out that don't match.
-        :type enforce_type: None | goblin.models.Vertex | goblin.models.Edge
-        :rtype: tuple[enforce_type | Object]
+        :type element_type: None | goblin.models.Vertex | goblin.models.Edge
+        :rtype: tuple[element_type | Object]
         """
         if isinstance(model_class, string_types):
             model_classes = (LazyImportClass(model_class), )
@@ -78,29 +70,21 @@ class Relationship(object):
             model_classes = []
             for mc in model_class:
                 if isinstance(mc, string_types):
-                    model_classes.append(LazyImportClass(mc))
+                    mc = LazyImportClass(mc)
+                if not (isinstance(mc, LazyImportClass) or not
+                            issubclass(mc, element_type)):
+                    warnings.warn(
+                        "Relationship constraint is not derived from %s and will be ignored!" % element_type,
+                        category=SyntaxWarning)
                 else:
                     model_classes.append(mc)
             model_classes = tuple(model_classes)
         else:
             model_classes = (model_class, )
-
-        if not enforce_type:
-            return model_classes
-        else:
-            final_classes = []
-            for kls in model_classes:
-                if (isinstance(kls, LazyImportClass) or
-                        issubclass(kls, enforce_type)):
-                    final_classes.append(kls)
-                else:
-                    warnings.warn(
-                        "Relationship constraint is not derived from %s and will be ignored!" % enforce_type,
-                        category=SyntaxWarning)
-            return tuple(final_classes)
+        return model_classes
 
     @requires_vertex
-    def vertices(self, limit=None, offset=None, callback=None, **kwargs):
+    def vertices(self, limit=None, **kwargs):
         """ Query and return all Vertices attached to the current Vertex
 
         TODO: fix this, the instance method isn't properly setup
@@ -110,46 +94,13 @@ class Relationship(object):
         :type offset: int | long
         :param callback: (Optional) Callback function to handle results
         :type callback: method
-        :rtype: List[goblin.models.Vertex] | Object
+        :rtype: List[goblin.models.Edge] | Object
         """
-        allowed_elts = []
-        allowed_vlts = []
-        for e in self.edge_classes:
-            allowed_elts += [e.get_label()]
-        for v in self.vertex_classes:
-            allowed_vlts += [v.get_label()]
-
-        if limit is not None and offset is not None:
-            start = offset
-            end = offset + limit
-        else:
-            start = end = None
-
-        operation = self.direction.lower() + 'V'
-
-        future = connection.get_future(kwargs)
-
-        future_result = getattr(
-            self.top_level_vertex, operation)(*allowed_elts)
-
-        def on_vertices(f):
-            try:
-                result = f.result()
-            except Exception as e:
-                future.set_exception(e)
-            else:
-                if callback:
-                    result = callback(result)
-                elif self.vertex_callback:
-                    result = self.vertex_callback(result)
-                future.set_result(result)
-
-        future_result.add_done_callback(on_vertices)
-
-        return future
+        script, bindings = self._vertices()
+        return self._get_elements(script, bindings, limit=limit, **kwargs)
 
     @requires_vertex
-    def edges(self, limit=None, offset=None, callback=None, **kwargs):
+    def edges(self, limit=None, **kwargs):
         """ Query and return all Edges attached to the current Vertex
 
         TODO: fix this, the instance method isn't properly setup
@@ -161,37 +112,57 @@ class Relationship(object):
         :type callback: method
         :rtype: List[goblin.models.Edge] | Object
         """
-        allowed_elts = []
-        for e in self.edge_classes:
-            allowed_elts += [e.get_label()]
+        script, bindings = self._edges()
+        return self._get_elements(script, bindings, limit=limit, **kwargs)
 
-        if limit is not None and offset is not None:
-            start = offset
-            end = offset + limit
+    def _get_elements(self, script, bindings, limit=None, **kwargs):
+        """ Query and return all Vertices attached to the current Vertex
+
+        :param limit: Limit the number of returned results
+        :type limit: int | long
+        :param offset: Query offset of the number of paginated results
+        :type offset: int | long
+        :param callback: (Optional) Callback function to handle results
+        :type callback: method
+        :rtype: List[goblin.models.Vertex] | Object
+        """
+        from goblin.models.element import Element
+
+        deserialize = kwargs.pop('deserialize', True)
+        def result_handler(results):
+            if not results:
+                results = []
+            if deserialize:
+                results = [Element.deserialize(r) for r in results]
+            return results
+
+        return connection.execute_query(script, bindings=bindings,
+                                        handler=result_handler, **kwargs)
+
+    def _vertices(self):
+        if self.direction == OUT:
+            vertex = IN
+        elif self.direction == IN:
+            vertex = OUT
         else:
-            start = end = None
+            vertex = 'other'
+        vlabels = [v.get_label() for v in self.vertex_classes]
+        script, bindings = self._edges()
+        script += ".%sV().hasLabel(*vlabels)" % (vertex, )
+        bindings.update({"vlabels": vlabels})
+        return script, bindings
 
-        operation = self.direction.lower() + 'E'
-
-        future = connection.get_future(kwargs)
-        future_result = getattr(
-            self.top_level_vertex, operation)(*allowed_elts)
-
-        def on_edges(f):
-            try:
-                result = f.result()
-            except Exception as e:
-                future.set_exception(e)
-            else:
-                if callback:
-                    result = callback(result)
-                elif self.edge_callback:
-                    result = self.edge_callback(result)
-                future.set_result(result)
-
-        future_result.add_done_callback(on_edges)
-
-        return future
+    def _edges(self):
+        if self.direction == OUT:
+            edge = OUT
+        elif self.direction == IN:
+            edge = IN
+        else:
+            edge = BOTH
+        elabels = [e.get_label() for e in self.edge_classes]
+        script = "g.V(vid).%sE(*elabels)" % (edge, )
+        bindings = {"vid": self.top_level_vertex.id, "elabels": elabels}
+        return script, bindings
 
     def allowed(self, edge_type, vertex_type):
         """
@@ -204,44 +175,11 @@ class Relationship(object):
         :type: goblin.models.Vertex
         :rtype: bool
         """
-        if self.strict:
-            if (edge_type in self.edge_classes and
-                    vertex_type in self.vertex_classes):
-                return True
-            else:
-                return False
-        else:
+        if (edge_type in self.edge_classes and
+                vertex_type in self.vertex_classes):
             return True
-
-    @requires_vertex
-    def query(self, edge_types=None, callback=None):
-        """ Generic Query method for quick access
-
-        :param edge_types: List of Edge classes to query against
-        :type edge_types: List[goblin.models.Edge] | None
-        :param callback: (Optional) Callback function to handle results
-        :type callback: method
-        :rtype: goblin.models.query.Query | Object
-        """
-        # if not self.top_level_vertex:
-        #    raise GoblinRelationshipException("No vertex known to start with, this is an error")
-        if edge_types:
-            if not isinstance(edge_types, array_types):
-                edge_types = (edge_types, )
-            for et in edge_types:
-                if et not in self.edge_classes:
-                    raise GoblinRelationshipException(
-                        "Not a recognized edge label type, invalid schema")
         else:
-            edge_types = self.edge_classes
-        from goblin.models.query import Query
-        query = Query(self.top_level_vertex).labels(*edge_types)
-        if callback:
-            return callback(query)
-        elif self.query_callback:
-            return self.query_callback(query)
-        else:
-            return query
+            return False
 
     def _create_entity(self, model_cls, model_params, outV=None, inV=None):
         """ Create Vertex and Edge between current Vertex and New Vertex
@@ -333,12 +271,6 @@ class Relationship(object):
                         if callback:
                             try:
                                 result = callback(new_edge, new_vertex)
-                            except Exception as e:
-                                future.set_exception(e)
-                        elif self.create_callback:
-                            try:
-                                result = self.create_callback(
-                                    new_edge, new_vertex)
                             except Exception as e:
                                 future.set_exception(e)
                         else:

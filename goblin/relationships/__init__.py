@@ -1,1 +1,1 @@
-from .base import Relationship
+from .relationship import Relationship

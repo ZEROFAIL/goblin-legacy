@@ -2,7 +2,6 @@
 def _save_edge(eid, outV, inV, elabel, attrs, geo_attrs, exclusive) {
 	/**
 	 * Saves an edge between two vertices
-	 * MAY NEED TO REWRITE THIS FUNCTION
 	 * :param id: edge id, if null, a new vertex is created
 	 * :param inV: edge inv id
 	 * :param outV: edge outv id
@@ -72,6 +71,7 @@ def _delete_edge(eid) {
      }
 }
 
+
 def _get_edges_between(out_v, in_v, elabel, page_num, per_page) {
     graph.tx().rollback()
     try {
@@ -90,6 +90,7 @@ def _get_edges_between(out_v, in_v, elabel, page_num, per_page) {
         throw(err)
     }
 }
+
 
 def _find_edge_by_value(value_type, elabel, field, val) {
     graph.tx().rollback()

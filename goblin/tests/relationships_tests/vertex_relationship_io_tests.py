@@ -8,7 +8,7 @@ from goblin.models import Vertex, Edge
 from goblin.properties import String, Integer
 from goblin.exceptions import GoblinRelationshipException
 from goblin.tests.base import BaseGoblinTestCase, TestVertexModel, counter
-from goblin.relationships.base import Relationship
+from goblin.relationships.relationship import Relationship
 
 
 class TestRelationshipEdgeModel(Edge):
@@ -26,7 +26,8 @@ class TestRelationshipStringPlaceholderVertexModel(Vertex):
 
     relation = Relationship(
         TestRelationshipEdgeModel,
-        "goblin.tests.relationships_tests.vertex_relationship_io_tests.AnotherTestVertexModel")
+        "goblin.tests.relationships_tests.vertex_relationship_io_tests.AnotherTestVertexModel",
+        'out')
 
 
 class AnotherTestVertexModel(Vertex):
@@ -41,7 +42,7 @@ class TestRelationshipVertexModel(Vertex):
     name = String(default='test_vertex')
     test_val = Integer(default=counter)
 
-    relation = Relationship(TestRelationshipEdgeModel, TestVertexModel)
+    relation = Relationship(TestRelationshipEdgeModel, TestVertexModel, 'out')
 
 
 @attr('unit', 'relationship')

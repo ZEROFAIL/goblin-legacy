@@ -4,10 +4,10 @@ goblin.relationships package
 Submodules
 ----------
 
-goblin.relationships.base module
+goblin.relationships.relationship module
 --------------------------------
 
-.. automodule:: goblin.relationships.base
+.. automodule:: goblin.relationships.relationship
     :members:
     :undoc-members:
     :show-inheritance:
