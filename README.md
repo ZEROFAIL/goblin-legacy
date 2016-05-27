@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/ZEROFAIL/goblin.svg?branch=dev)](https://travis-ci.org/ZEROFAIL/goblin)
 [![Coverage Status](https://coveralls.io/repos/github/ZEROFAIL/goblin/badge.svg?branch=dev)](https://coveralls.io/github/ZEROFAIL/goblin?branch=dev)
 [![Gitter chat](https://badges.gitter.im/ZEROFAIL/goblin.svg)](https://gitter.im/ZEROFAIL/goblin?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![Documentation Status](https://readthedocs.org/projects/goblin/badge/?version=latest)](http://goblin.readthedocs.org/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/goblin/badge/?version=latest)](http://goblin.readthedocs.io/en/latest/?badge=latest)
 
 This project began as the ZEROFAIL fork of ``mogwai``, a [TinkerPop3](https://tinkerpop.incubator.apache.org/) [Gremlin Server](http://tinkerpop.apache.org/docs/3.1.1-incubating/reference/#gremlin-server) compatible port of Cody Lee's original Python object graph mapper for Titan 0.5.x.
 
