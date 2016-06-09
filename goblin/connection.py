@@ -13,17 +13,7 @@ from goblin.exceptions import GoblinConnectionError
 logger = logging.getLogger(__name__)
 
 
-# Global vars
-_connection_pool = None
-_graph_name = None
-_traversal_source = None
-_loaded_models = []
-_scheme = None
-_netloc = None
-_client_module = None
-
-
-def execute_query(query, bindings=None, pool=None, future_class=None,
+def execute_query(query, bindings=None, app=None, pool=None, future_class=None,
                   graph_name=None, traversal_source=None, username="",
                   password="", handler=None, request_id=None, *args, **kwargs):
     """
@@ -45,22 +35,26 @@ def execute_query(query, bindings=None, pool=None, future_class=None,
 
     :returns: Future
     """
+    import ipdb; ipdb.set_trace()
+    if pool is None and app:
+        pool = app.config["CONNECTION_POOL"]
 
-    if pool is None:
-        pool = _connection_pool
+    if not pool:
+        raise GoblinConnectionError(("Please create ``Goblin`` instance or "
+                                     "pass pool explicitly"))
 
     if future_class is None:
         future_class = pool.future_class
 
-    if not pool and not future_class:
-        raise GoblinConnectionError(("Please call connection.setup or pass "
-                                     "pool and future_class explicitly"))
+    if graph_name is None and app:
+        graph_name = app.config["GRAPH"]
+    else:
+        graph_name = "graph"
 
-    if graph_name is None:
-        graph_name = _graph_name or "graph"
-
-    if traversal_source is None:
-        traversal_source = _traversal_source or "g"
+    if traversal_source is None and app:
+        traversal_source = app.config["TRAVERSAL_SOURCE"]
+    else:
+        traversal_source = "g"
 
     aliases = {"graph": graph_name, "g": traversal_source}
 
@@ -84,141 +78,12 @@ def execute_query(query, bindings=None, pool=None, future_class=None,
     return future
 
 
-def tear_down():
-    """Close the global connection pool."""
-    global _connection_pool
-    if _connection_pool:
-        return _connection_pool.close()
-
-
-def setup(url, pool_class=None, graph_name='graph', traversal_source='g',
-          username='', password='', pool_size=256, future_class=None,
-          ssl_context=None, connector=None, loop=None):
-    """
-    This function is responsible for instantiating the global variables that
-    provide :py:mod:`goblin` connection configuration params.
-
-    :param str url: url for the Gremlin Server. Expected format:
-        (ws|wss)://username:password@hostname:port/
-    :param gremlinclient.pool.Pool pool_class: Pool class used to create
-        global pool. If ``None`` trys to import
-        :py:class:`tornado_client.Pool<gremlinclient.tornado_client.client.Pool>`,
-        if this import fails, trys to import
-        :py:class:`aiohttp_client.Pool<gremlinclient.aiohttp_client.client.Pool>`
-    :param str graph_name: graph name as defined in server configuration.
-        Defaults to "graph"
-    :param str traversal_source: traversal source name as defined in the
-        server configuration. Defaults to "g"
-    :param str username: username as defined in the Tinkerpop credentials
-        graph.
-    :param str password: password for username as definined in the Tinkerpop
-        credentials graph
-    :param int pool_size: maximum number of connections allowed by global
-        connection pool_size
-    :param class future: type of Future. typically -
-        :py:class:`asyncio.Future`, :py:class:`trollius.Future`, or
-        :py:class:`tornado.concurrent.Future`
-    :param ssl.SSLContext ssl_context: :py:class:`ssl.SSLContext` for secure
-        protocol
-    :param connector: connector used to establish :py:mod:`gremlinclient`
-        connection. Overides ssl_context param.
-    :param loop: io loop.
-    """
-    global _connection_pool
-    global _graph_name
-    global _traversal_source
-    global _scheme
-    global _netloc
-    global _client_module
-
-    _graph_name = graph_name
-    _traversal_source = traversal_source
-
-    parsed_url = urlparse(url)
-    _scheme = parsed_url.scheme
-    _netloc = parsed_url.netloc
-
-    if pool_class is None:
-        pool_class = _get_pool_class()
-
-    try:
-        _client_module = pool_class.__module__.split('.')[1]
-    except IndexError:
-        raise ValueError("Unknown client module.")
-
-    if connector is None:
-        connector = _get_connector(ssl_context)
-
-    _connection_pool = pool_class(url,
-                                  maxsize=pool_size,
-                                  username=username,
-                                  password=password,
-                                  force_release=True,
-                                  future_class=future_class,
-                                  loop=loop)
-
-    # Model/schema sync will run here as well as indexing
-
-
-def _get_pool_class():
-    try:
-        from gremlinclient.tornado_client import Pool
-    except ImportError:
-        try:
-            from gremlinclient.aiohttp_client import Pool
-        except ImportError:
-            raise ImportError(
-                "Install appropriate client or pass pool explicitly")
-    return Pool
-
-
-def _get_connector(ssl_context):
-    if _scheme in SECURE_SCHEMES:
-        if ssl_context is None:
-            raise ValueError("Please pass ssl_context for secure protocol")
-
-        if _client_module == AIOHTTP_CLIENT_MODULE:
-            import aiohttp
-            connector = aiohttp.TCPConnector(ssl_context=ssl_context,
-                                             loop=loop)
-
-        elif _client_module == TORNADO_CLIENT_MODULE:
-            from functools import partial
-            from tornado import httpclient
-            connector = partial(
-                httpclient.HTTPRequest, ssl_options=sslcontext)
-        else:
-            raise ValueError("Unknown client module")
-    elif _scheme in INSECURE_SCHEMES:
-        connector = None
-    else:
-        raise ValueError("Unknown protocol")
-    return connector
-
-
-def _add_model_to_space(model):
-    global _loaded_models
-    _loaded_models.append(model)
-
-
 def generate_spec():  # pragma: no cover
     pass
 
 
 def sync_spec():  # pragma: no cover
     pass
-
-
-def get_future(kwargs):
-    future_class = kwargs.get('future_class', None)
-    if future_class is None:
-        pool = kwargs.get('pool', _connection_pool)
-        if pool is not None:
-            future_class = pool.future_class
-        else:
-            raise GoblinConnectionError(("Please call connection.setup or "
-                                         "pass pool explicitly"))
-    return future_class()
 
 
 def pop_execute_query_kwargs(keyword_arguments):
